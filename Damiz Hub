@@ -1,0 +1,542 @@
+-- LocalScript (Cole no seu Executor)
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local camera = workspace.CurrentCamera
+
+-- Configuração do armazenamento local permanente
+local FOLDER_NAME = "MyScriptStorage"
+local FILE_PATH = FOLDER_NAME .. "/saved_scripts.json"
+
+local savedScripts = {}
+
+local function saveScriptsToFile()
+	if writefile then
+		pcall(function()
+			if isfolder and not isfolder(FOLDER_NAME) and makefolder then
+				makefolder(FOLDER_NAME)
+			end
+			writefile(FILE_PATH, HttpService:JSONEncode(savedScripts))
+		end)
+	end
+end
+
+local function loadScriptsFromFile()
+	if readfile and isfile and isfile(FILE_PATH) then
+		pcall(function()
+			local data = readfile(FILE_PATH)
+			local decoded = HttpService:JSONDecode(data)
+			if type(decoded) == "table" then
+				savedScripts = decoded
+			end
+		end)
+	end
+end
+
+loadScriptsFromFile()
+
+-- 1. ScreenGui Principal
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "StorageScriptGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder = 999999
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+if playerGui:FindFirstChild("StorageScriptGui") then
+	playerGui:FindFirstChild("StorageScriptGui"):Destroy()
+end
+screenGui.Parent = playerGui
+
+-- 2. Botão "EX. GUI" (Botão do Topo)
+local exButton = Instance.new("TextButton")
+exButton.Name = "ExGuiButton"
+exButton.Size = UDim2.new(0, 85, 0, 28)
+exButton.Position = UDim2.new(0.5, 0, 0, 2)
+exButton.AnchorPoint = Vector2.new(0.5, 0)
+exButton.BackgroundColor3 = Color3.fromRGB(10, 20, 35)
+exButton.BorderSizePixel = 0
+exButton.Text = "EX. GUI"
+exButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+exButton.TextSize = 14
+exButton.Font = Enum.Font.GothamBold
+exButton.ZIndex = 200
+exButton.Parent = screenGui
+
+local exCorner = Instance.new("UICorner")
+exCorner.CornerRadius = UDim.new(0, 6)
+exCorner.Parent = exButton
+
+local exStroke = Instance.new("UIStroke")
+exStroke.Color = Color3.fromRGB(0, 220, 255)
+exStroke.Thickness = 2
+exStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+exStroke.Parent = exButton
+
+local textGradient = Instance.new("UIGradient")
+textGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+	ColorSequenceKeypoint.new(0.20, Color3.fromRGB(255, 255, 0)),
+	ColorSequenceKeypoint.new(0.40, Color3.fromRGB(0, 255, 0)),
+	ColorSequenceKeypoint.new(0.60, Color3.fromRGB(0, 255, 255)),
+	ColorSequenceKeypoint.new(0.80, Color3.fromRGB(170, 0, 255)),
+	ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
+})
+textGradient.Parent = exButton
+
+local speed = 0.5
+RunService.RenderStepped:Connect(function()
+	local hue = (tick() * speed) % 1
+	textGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, Color3.fromHSV((hue) % 1, 0.9, 1)),
+		ColorSequenceKeypoint.new(0.33, Color3.fromHSV((hue + 0.33) % 1, 0.9, 1)),
+		ColorSequenceKeypoint.new(0.66, Color3.fromHSV((hue + 0.66) % 1, 0.9, 1)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromHSV((hue) % 1, 0.9, 1))
+	})
+end)
+
+-- 3. Botão da Logo Redonda (Inicia Oculto)
+local logoButton = Instance.new("ImageButton")
+logoButton.Name = "LogoButton"
+logoButton.Size = UDim2.new(0, 52, 0, 52)
+logoButton.Position = UDim2.new(0, 20, 0, 20)
+logoButton.BackgroundTransparency = 1
+logoButton.Image = "rbxthumb://type=Asset&id=10001234026&w=150&h=150"
+logoButton.ScaleType = Enum.ScaleType.Crop
+logoButton.Visible = false
+logoButton.ZIndex = 100
+logoButton.Parent = screenGui
+
+local logoCorner = Instance.new("UICorner")
+logoCorner.CornerRadius = UDim.new(1, 0)
+logoCorner.Parent = logoButton
+
+local logoStroke = Instance.new("UIStroke")
+logoStroke.Color = Color3.fromRGB(0, 240, 255)
+logoStroke.Thickness = 2.5
+logoStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+logoStroke.Parent = logoButton
+
+-- Movimentação com limite de tela
+local dragging, dragInput, dragStart, startPos
+
+local function updateLogoInput(input)
+	local delta = input.Position - dragStart
+	local newOffsetX = startPos.X.Offset + delta.X
+	local newOffsetY = startPos.Y.Offset + delta.Y
+
+	local viewportSize = camera.ViewportSize
+	local maxX = math.max(0, viewportSize.X - logoButton.AbsoluteSize.X)
+	local maxY = math.max(0, viewportSize.Y - logoButton.AbsoluteSize.Y)
+
+	local clampedX = math.clamp(newOffsetX, 0, maxX)
+	local clampedY = math.clamp(newOffsetY, 0, maxY)
+
+	logoButton.Position = UDim2.new(0, clampedX, 0, clampedY)
+end
+
+logoButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = logoButton.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+logoButton.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		updateLogoInput(input)
+	end
+end)
+
+-- 4. Painel Principal (Posicionado um pouco abaixo da logo)
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 440, 0, 320)
+mainFrame.Position = UDim2.new(0, 20, 0, 80) -- Ajustado para ficar logo abaixo da logo
+mainFrame.BackgroundColor3 = Color3.fromRGB(10, 12, 18)
+mainFrame.BorderSizePixel = 0
+mainFrame.Visible = false
+mainFrame.ClipsDescendants = true
+mainFrame.ZIndex = 50
+mainFrame.Parent = screenGui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 14)
+frameCorner.Parent = mainFrame
+
+local frameStroke = Instance.new("UIStroke")
+frameStroke.Color = Color3.fromRGB(0, 200, 255)
+frameStroke.Thickness = 2
+frameStroke.Parent = mainFrame
+
+local frameGradient = Instance.new("UIGradient")
+frameGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 18, 28)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 9, 14))
+})
+frameGradient.Rotation = 45
+frameGradient.Parent = mainFrame
+
+-- 5. Barra Superior
+local topBar = Instance.new("Frame")
+topBar.Name = "TopBar"
+topBar.Size = UDim2.new(1, -20, 0, 75)
+topBar.Position = UDim2.new(0, 10, 0, 10)
+topBar.BackgroundColor3 = Color3.fromRGB(18, 22, 32)
+topBar.BorderSizePixel = 0
+topBar.ZIndex = 51
+topBar.Parent = mainFrame
+
+local topBarCorner = Instance.new("UICorner")
+topBarCorner.CornerRadius = UDim.new(0, 10)
+topBarCorner.Parent = topBar
+
+local topBarStroke = Instance.new("UIStroke")
+topBarStroke.Color = Color3.fromRGB(40, 50, 75)
+topBarStroke.Thickness = 1
+topBarStroke.Parent = topBar
+
+-- 5.1. Campo do Código
+local codeScrollFrame = Instance.new("ScrollingFrame")
+codeScrollFrame.Name = "CodeScrollFrame"
+codeScrollFrame.Size = UDim2.new(0, 180, 0, 58)
+codeScrollFrame.Position = UDim2.new(0, 8, 0, 8.5)
+codeScrollFrame.BackgroundColor3 = Color3.fromRGB(12, 14, 20)
+codeScrollFrame.BorderSizePixel = 0
+codeScrollFrame.ScrollBarThickness = 3
+codeScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(0, 240, 255)
+codeScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+codeScrollFrame.ZIndex = 52
+codeScrollFrame.Parent = topBar
+
+local codeScrollCorner = Instance.new("UICorner")
+codeScrollCorner.CornerRadius = UDim.new(0, 6)
+codeScrollCorner.Parent = codeScrollFrame
+
+local scriptTextBox = Instance.new("TextBox")
+scriptTextBox.Name = "ScriptTextBox"
+scriptTextBox.Size = UDim2.new(1, -8, 1, 0)
+scriptTextBox.Position = UDim2.new(0, 4, 0, 0)
+scriptTextBox.BackgroundTransparency = 1
+scriptTextBox.TextColor3 = Color3.fromRGB(230, 245, 255)
+scriptTextBox.PlaceholderText = "-- Cole o script..."
+scriptTextBox.PlaceholderColor3 = Color3.fromRGB(100, 115, 140)
+scriptTextBox.Text = ""
+scriptTextBox.TextXAlignment = Enum.TextXAlignment.Left
+scriptTextBox.TextYAlignment = Enum.TextYAlignment.Top
+scriptTextBox.MultiLine = true
+scriptTextBox.ClearTextOnFocus = true
+scriptTextBox.Font = Enum.Font.Code
+scriptTextBox.TextSize = 12
+scriptTextBox.ZIndex = 53
+scriptTextBox.Parent = codeScrollFrame
+
+scriptTextBox:GetPropertyChangedSignal("TextBounds"):Connect(function()
+	codeScrollFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(58, scriptTextBox.TextBounds.Y + 5))
+end)
+
+-- 5.2. Campo de Nome
+local nameTextBox = Instance.new("TextBox")
+nameTextBox.Name = "NameTextBox"
+nameTextBox.Size = UDim2.new(0, 90, 0, 58)
+nameTextBox.Position = UDim2.new(0, 194, 0, 8.5)
+nameTextBox.BackgroundColor3 = Color3.fromRGB(12, 14, 20)
+nameTextBox.TextColor3 = Color3.fromRGB(230, 245, 255)
+nameTextBox.PlaceholderText = "Nome..."
+nameTextBox.PlaceholderColor3 = Color3.fromRGB(100, 115, 140)
+nameTextBox.Text = ""
+nameTextBox.Font = Enum.Font.Gotham
+nameTextBox.TextSize = 11
+nameTextBox.ClearTextOnFocus = false
+nameTextBox.ZIndex = 52
+nameTextBox.Parent = topBar
+
+local nameCorner = Instance.new("UICorner")
+nameCorner.CornerRadius = UDim.new(0, 6)
+nameCorner.Parent = nameTextBox
+
+nameTextBox:GetPropertyChangedSignal("Text"):Connect(function()
+	if #nameTextBox.Text > 100 then
+		nameTextBox.Text = nameTextBox.Text:sub(1, 100)
+	end
+end)
+
+-- 5.3. Botão STORAGE
+local storageButton = Instance.new("TextButton")
+storageButton.Name = "StorageButton"
+storageButton.Size = UDim2.new(0, 120, 0, 58)
+storageButton.Position = UDim2.new(0, 290, 0, 8.5)
+storageButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+storageButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+storageButton.Text = "STORAGE"
+storageButton.Font = Enum.Font.GothamBold
+storageButton.TextSize = 10
+storageButton.ZIndex = 52
+storageButton.Parent = topBar
+
+local storageBtnCorner = Instance.new("UICorner")
+storageBtnCorner.CornerRadius = UDim.new(0, 6)
+storageBtnCorner.Parent = storageButton
+
+local storageBtnGradient = Instance.new("UIGradient")
+storageBtnGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(130, 0, 255))
+})
+storageBtnGradient.Parent = storageButton
+
+-- 6. Lista de Scripts
+local scrollList = Instance.new("ScrollingFrame")
+scrollList.Name = "ScriptList"
+scrollList.Size = UDim2.new(1, -20, 0, 210)
+scrollList.Position = UDim2.new(0, 10, 0, 95)
+scrollList.BackgroundTransparency = 1
+scrollList.BorderSizePixel = 0
+scrollList.ScrollBarThickness = 5
+scrollList.ScrollBarImageColor3 = Color3.fromRGB(0, 240, 255)
+scrollList.ZIndex = 51
+scrollList.Parent = mainFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Parent = scrollList
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 8)
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	scrollList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end)
+
+local function addScriptToUI(scriptData)
+	local itemFrame = Instance.new("Frame")
+	itemFrame.Name = "ScriptCard"
+	itemFrame.Size = UDim2.new(1, -10, 0, 42)
+	itemFrame.BackgroundColor3 = Color3.fromRGB(18, 22, 32)
+	itemFrame.BorderSizePixel = 0
+	itemFrame.ZIndex = 52
+	itemFrame.Parent = scrollList
+
+	local itemCorner = Instance.new("UICorner")
+	itemCorner.CornerRadius = UDim.new(0, 8)
+	itemCorner.Parent = itemFrame
+
+	local itemStroke = Instance.new("UIStroke")
+	itemStroke.Color = Color3.fromRGB(35, 45, 65)
+	itemStroke.Thickness = 1
+	itemStroke.Parent = itemFrame
+
+	local editButton = Instance.new("TextButton")
+	editButton.Name = "EditBtn"
+	editButton.Size = UDim2.new(0, 18, 0, 18)
+	editButton.Position = UDim2.new(0, 8, 0.5, -9)
+	editButton.BackgroundTransparency = 1
+	editButton.Text = "✏️"
+	editButton.TextSize = 9
+	editButton.ZIndex = 53
+	editButton.Parent = itemFrame
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "Title"
+	titleLabel.Size = UDim2.new(1, -165, 1, 0)
+	titleLabel.Position = UDim2.new(0, 30, 0, 0)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLabel.Text = tostring(scriptData.Name):upper()
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.TextSize = 11
+	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	titleLabel.ZIndex = 53
+	titleLabel.Parent = itemFrame
+
+	local editBox = Instance.new("TextBox")
+	editBox.Name = "EditBox"
+	editBox.Size = UDim2.new(1, -165, 0, 24)
+	editBox.Position = UDim2.new(0, 30, 0.5, -12)
+	editBox.BackgroundColor3 = Color3.fromRGB(10, 12, 18)
+	editBox.TextColor3 = Color3.fromRGB(0, 240, 255)
+	editBox.Text = scriptData.Name
+	editBox.Font = Enum.Font.Gotham
+	editBox.TextSize = 11
+	editBox.Visible = false
+	editBox.ZIndex = 54
+	editBox.Parent = itemFrame
+
+	local editBoxCorner = Instance.new("UICorner")
+	editBoxCorner.CornerRadius = UDim.new(0, 4)
+	editBoxCorner.Parent = editBox
+
+	editButton.MouseButton1Click:Connect(function()
+		local isEditing = editBox.Visible
+		if not isEditing then
+			editBox.Text = scriptData.Name
+			editBox.Visible = true
+			titleLabel.Visible = false
+			editBox:CaptureFocus()
+		else
+			editBox.Visible = false
+			titleLabel.Visible = true
+		end
+	end)
+
+	local function confirmRename()
+		local newName = editBox.Text
+		if newName:gsub("%s+", "") ~= "" then
+			scriptData.Name = newName
+			titleLabel.Text = tostring(newName):upper()
+			saveScriptsToFile()
+		end
+		editBox.Visible = false
+		titleLabel.Visible = true
+	end
+
+	editBox.FocusLost:Connect(confirmRename)
+
+	local deleteButton = Instance.new("TextButton")
+	deleteButton.Name = "DeleteBtn"
+	deleteButton.Size = UDim2.new(0, 58, 0, 26)
+	deleteButton.Position = UDim2.new(1, -128, 0.5, -13)
+	deleteButton.BackgroundColor3 = Color3.fromRGB(180, 40, 60)
+	deleteButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	deleteButton.Text = "DELETE"
+	deleteButton.Font = Enum.Font.GothamBold
+	deleteButton.TextSize = 9
+	deleteButton.ZIndex = 53
+	deleteButton.Parent = itemFrame
+
+	local delCorner = Instance.new("UICorner")
+	delCorner.CornerRadius = UDim.new(0, 6)
+	delCorner.Parent = deleteButton
+
+	local executeButton = Instance.new("TextButton")
+	executeButton.Name = "ExecuteBtn"
+	executeButton.Size = UDim2.new(0, 60, 0, 26)
+	executeButton.Position = UDim2.new(1, -64, 0.5, -13)
+	executeButton.BackgroundColor3 = Color3.fromRGB(0, 180, 220)
+	executeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	executeButton.Text = "EXECUTE"
+	executeButton.Font = Enum.Font.GothamBold
+	executeButton.TextSize = 9
+	executeButton.ZIndex = 53
+	executeButton.Parent = itemFrame
+
+	local execCorner = Instance.new("UICorner")
+	execCorner.CornerRadius = UDim.new(0, 6)
+	execCorner.Parent = executeButton
+
+	executeButton.MouseButton1Click:Connect(function()
+		local codeToRun = scriptData.Code
+		if loadstring then
+			local func, err = loadstring(codeToRun)
+			if func then
+				task.spawn(func)
+			else
+				warn("[Storage Exec]: Erro no script: " .. tostring(err))
+			end
+		end
+	end)
+
+	deleteButton.MouseButton1Click:Connect(function()
+		for i, v in ipairs(savedScripts) do
+			if v == scriptData then
+				table.remove(savedScripts, i)
+				break
+			end
+		end
+		saveScriptsToFile()
+		itemFrame:Destroy()
+	end)
+end
+
+for _, item in ipairs(savedScripts) do
+	addScriptToUI(item)
+end
+
+-- 7. Animações e Controles
+local isOpen = false
+local tweenInfo = TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+local function togglePanel()
+	isOpen = not isOpen
+	
+	if isOpen then
+		mainFrame.Size = UDim2.new(0, 440, 0, 0)
+		mainFrame.Visible = true
+		
+		local tween = TweenService:Create(mainFrame, tweenInfo, {Size = UDim2.new(0, 440, 0, 320)})
+		tween:Play()
+	else
+		local tween = TweenService:Create(mainFrame, tweenInfo, {Size = UDim2.new(0, 440, 0, 0)})
+		tween:Play()
+		tween.Completed:Connect(function()
+			if not isOpen then
+				mainFrame.Visible = false
+			end
+		end)
+	end
+end
+
+-- Ao clicar no botão "EX. GUI", alterna visibilidade da logo
+exButton.MouseButton1Click:Connect(function()
+	logoButton.Visible = not logoButton.Visible
+	if not logoButton.Visible and isOpen then
+		togglePanel()
+	end
+end)
+
+-- Ao clicar na Logo, abre/fecha o painel
+logoButton.MouseButton1Click:Connect(function()
+	if not dragging then
+		togglePanel()
+	end
+end)
+
+-- Ação STORAGE
+storageButton.Activated:Connect(function()
+	local codeText = scriptTextBox.Text
+	local scriptName = nameTextBox.Text
+
+	if codeText:gsub("%s+", "") ~= "" then
+		for _, item in ipairs(savedScripts) do
+			if item.Code == codeText then
+				warn("[Storage]: Este script já está salvo no armazenamento!")
+				return
+			end
+		end
+
+		if scriptName:gsub("%s+", "") == "" then
+			local count = #savedScripts + 1
+			scriptName = "SCRIPT " .. string.format("%.1f", count)
+		end
+
+		local newScriptData = {
+			Name = scriptName,
+			Code = codeText
+		}
+
+		table.insert(savedScripts, newScriptData)
+		saveScriptsToFile()
+		addScriptToUI(newScriptData)
+		
+		nameTextBox.Text = ""
+		scriptTextBox.Text = ""
+	end
+end)
