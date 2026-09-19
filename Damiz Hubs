@@ -167,11 +167,11 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
--- 4. Painel Principal (Posicionado um pouco abaixo da logo)
+-- 4. Painel Principal
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 440, 0, 320)
-mainFrame.Position = UDim2.new(0, 20, 0, 80) -- Ajustado para ficar logo abaixo da logo
+mainFrame.Position = UDim2.new(0, 20, 0, 80)
 mainFrame.BackgroundColor3 = Color3.fromRGB(10, 12, 18)
 mainFrame.BorderSizePixel = 0
 mainFrame.Visible = false
@@ -215,7 +215,7 @@ topBarStroke.Color = Color3.fromRGB(40, 50, 75)
 topBarStroke.Thickness = 1
 topBarStroke.Parent = topBar
 
--- 5.1. Campo do Código
+-- 5.1. Campo do Código (Permite Espaços)
 local codeScrollFrame = Instance.new("ScrollingFrame")
 codeScrollFrame.Name = "CodeScrollFrame"
 codeScrollFrame.Size = UDim2.new(0, 180, 0, 58)
@@ -254,7 +254,7 @@ scriptTextBox:GetPropertyChangedSignal("TextBounds"):Connect(function()
 	codeScrollFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(58, scriptTextBox.TextBounds.Y + 5))
 end)
 
--- 5.2. Campo de Nome
+-- 5.2. Campo de Nome (NÃO Permite Espaços)
 local nameTextBox = Instance.new("TextBox")
 nameTextBox.Name = "NameTextBox"
 nameTextBox.Size = UDim2.new(0, 90, 0, 58)
@@ -274,7 +274,12 @@ local nameCorner = Instance.new("UICorner")
 nameCorner.CornerRadius = UDim.new(0, 6)
 nameCorner.Parent = nameTextBox
 
+-- Bloqueia espaços e limita tamanho no Nome
 nameTextBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local cleanText = nameTextBox.Text:gsub("%s+", "")
+	if cleanText ~= nameTextBox.Text then
+		nameTextBox.Text = cleanText
+	end
 	if #nameTextBox.Text > 100 then
 		nameTextBox.Text = nameTextBox.Text:sub(1, 100)
 	end
@@ -324,6 +329,8 @@ listLayout.Padding = UDim.new(0, 8)
 listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 	scrollList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
 end)
+
+local renderList -- Declaração antecipada
 
 local function addScriptToUI(scriptData)
 	local itemFrame = Instance.new("Frame")
@@ -384,6 +391,14 @@ local function addScriptToUI(scriptData)
 	editBoxCorner.CornerRadius = UDim.new(0, 4)
 	editBoxCorner.Parent = editBox
 
+	-- Remove espaços ao renomear
+	editBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local cleanText = editBox.Text:gsub("%s+", "")
+		if cleanText ~= editBox.Text then
+			editBox.Text = cleanText
+		end
+	end)
+
 	editButton.MouseButton1Click:Connect(function()
 		local isEditing = editBox.Visible
 		if not isEditing then
@@ -398,14 +413,15 @@ local function addScriptToUI(scriptData)
 	end)
 
 	local function confirmRename()
-		local newName = editBox.Text
-		if newName:gsub("%s+", "") ~= "" then
+		local newName = editBox.Text:gsub("%s+", "")
+		if newName ~= "" then
 			scriptData.Name = newName
-			titleLabel.Text = tostring(newName):upper()
 			saveScriptsToFile()
+			renderList() -- Recarrega a lista para reordenar alfabeticamente
+		else
+			editBox.Visible = false
+			titleLabel.Visible = true
 		end
-		editBox.Visible = false
-		titleLabel.Visible = true
 	end
 
 	editBox.FocusLost:Connect(confirmRename)
@@ -466,9 +482,24 @@ local function addScriptToUI(scriptData)
 	end)
 end
 
-for _, item in ipairs(savedScripts) do
-	addScriptToUI(item)
+-- Função para reordenar alfabeticamente e renderizar a lista
+renderList = function()
+	for _, child in ipairs(scrollList:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+
+	table.sort(savedScripts, function(a, b)
+		return tostring(a.Name):lower() < tostring(b.Name):lower()
+	end)
+
+	for _, item in ipairs(savedScripts) do
+		addScriptToUI(item)
+	end
 end
+
+renderList()
 
 -- 7. Animações e Controles
 local isOpen = false
@@ -512,7 +543,7 @@ end)
 -- Ação STORAGE
 storageButton.Activated:Connect(function()
 	local codeText = scriptTextBox.Text
-	local scriptName = nameTextBox.Text
+	local scriptName = nameTextBox.Text:gsub("%s+", "")
 
 	if codeText:gsub("%s+", "") ~= "" then
 		for _, item in ipairs(savedScripts) do
@@ -522,9 +553,9 @@ storageButton.Activated:Connect(function()
 			end
 		end
 
-		if scriptName:gsub("%s+", "") == "" then
+		if scriptName == "" then
 			local count = #savedScripts + 1
-			scriptName = "SCRIPT " .. string.format("%.1f", count)
+			scriptName = "SCRIPT" .. string.format("%.1f", count)
 		end
 
 		local newScriptData = {
@@ -534,7 +565,7 @@ storageButton.Activated:Connect(function()
 
 		table.insert(savedScripts, newScriptData)
 		saveScriptsToFile()
-		addScriptToUI(newScriptData)
+		renderList()
 		
 		nameTextBox.Text = ""
 		scriptTextBox.Text = ""
